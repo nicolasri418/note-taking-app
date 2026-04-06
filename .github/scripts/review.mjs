@@ -1,20 +1,21 @@
 /**
- * Claude PR Review via Portkey Gateway
- * ─────────────────────────────────────
- * Called by the claude-review workflow. Reads the PR diff from stdin (passed
- * as the DIFF env var), sends it to Claude through Portkey, then posts the
- * result as a PR review comment via the GitHub REST API.
+ * Claude PR Review via Perficient Portkey Gateway (AWS Bedrock)
+ * ──────────────────────────────────────────────────────────────
+ * Calls the company's self-hosted Portkey gateway using the OpenAI-compatible
+ * /v1/chat/completions endpoint, then posts the result as a PR comment.
  *
- * Required env vars (set as GitHub Actions secrets):
- *   PORTKEY_API_KEY      — your Portkey account API key
- *   ANTHROPIC_API_KEY    — your Anthropic API key (passed directly since
- *                          virtual keys are not available)
- *   GH_TOKEN             — GITHUB_TOKEN (provided automatically by Actions)
- *   GITHUB_REPOSITORY    — owner/repo  (provided automatically by Actions)
- *   PR_NUMBER            — pull request number
- *   PR_DIFF              — the raw unified diff text
- *   PR_TITLE             — PR title (optional, for context)
- *   TRIGGER_COMMENT      — body of the @claude comment, if triggered by one
+ * Required GitHub Actions secrets:
+ *   PORTKEY_API_KEY    — x-portkey-api-key for the internal gateway
+ *
+ * Automatic Actions env vars used:
+ *   GH_TOKEN           — GITHUB_TOKEN
+ *   GITHUB_REPOSITORY  — owner/repo
+ *
+ * Workflow-provided env vars:
+ *   PR_NUMBER          — pull request number
+ *   PR_DIFF            — raw unified diff text
+ *   PR_TITLE           — PR title
+ *   TRIGGER_COMMENT    — body of the @claude comment (empty on auto-review)
  */
 
 import { createRequire } from 'module';
@@ -23,23 +24,27 @@ const https = require('https');
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const PORTKEY_API_KEY  = process.env.PORTKEY_API_KEY;
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-const GH_TOKEN         = process.env.GH_TOKEN;
-const REPO                = process.env.GITHUB_REPOSITORY;           // owner/repo
-const PR_NUMBER           = process.env.PR_NUMBER;
-const DIFF                = (process.env.PR_DIFF || '').slice(0, 12000); // cap size
-const PR_TITLE            = process.env.PR_TITLE || '';
-const TRIGGER_COMMENT     = process.env.TRIGGER_COMMENT || '';
+const PORTKEY_API_KEY = process.env.PORTKEY_API_KEY;
+const GH_TOKEN        = process.env.GH_TOKEN;
+const REPO            = process.env.GITHUB_REPOSITORY;
+const PR_NUMBER       = process.env.PR_NUMBER;
+const DIFF            = (process.env.PR_DIFF    || '').slice(0, 12000);
+const PR_TITLE        = process.env.PR_TITLE    || '';
+const TRIGGER_COMMENT = process.env.TRIGGER_COMMENT || '';
 
-if (!PORTKEY_API_KEY || !ANTHROPIC_API_KEY) {
-  console.error('Missing PORTKEY_API_KEY or ANTHROPIC_API_KEY');
+// Gateway coordinates — matches the curl example from the team
+const GATEWAY_HOST  = 'portkeygateway.perficient.com';
+const GATEWAY_PATH  = '/v1/chat/completions';
+const MODEL         = '@aws-bedrock-use2/us.anthropic.claude-sonnet-4-6';
+
+if (!PORTKEY_API_KEY) {
+  console.error('Missing PORTKEY_API_KEY secret');
   process.exit(1);
 }
 
-// ─── Build prompt ─────────────────────────────────────────────────────────────
+// ─── Prompts ──────────────────────────────────────────────────────────────────
 
-const baseInstructions = `You are a Senior Full Stack Developer reviewing a Pull Request for
+const SYSTEM_PROMPT = `You are a Senior Full Stack Developer reviewing a Pull Request for
 NoteFlow — a note-taking app built with ASP.NET Core 8 (Repository pattern, EF Core + SQLite)
 and React 18 / TypeScript / Tailwind CSS.
 
@@ -54,32 +59,32 @@ For every review provide:
 
 Use GitHub-flavoured Markdown. Be concise. Use collapsible <details> sections for long code.`;
 
-const userMessage = TRIGGER_COMMENT
+const userContent = TRIGGER_COMMENT
   ? `${TRIGGER_COMMENT}\n\nPR title: ${PR_TITLE}\n\nDiff:\n\`\`\`diff\n${DIFF}\n\`\`\``
   : `Please review this PR.\n\nPR title: ${PR_TITLE}\n\nDiff:\n\`\`\`diff\n${DIFF}\n\`\`\``;
 
-// ─── Call Portkey → Claude ────────────────────────────────────────────────────
+// ─── Call gateway ─────────────────────────────────────────────────────────────
 
-async function callPortkey() {
+async function callGateway() {
   const payload = JSON.stringify({
-    model: 'claude-opus-4-6',
+    model: MODEL,
     max_tokens: 4096,
-    system: baseInstructions,
-    messages: [{ role: 'user', content: userMessage }],
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user',   content: userContent   },
+    ],
   });
 
   return new Promise((resolve, reject) => {
     const req = https.request(
       {
-        hostname: 'api.portkey.ai',
-        path: '/v1/messages',
-        method: 'POST',
+        hostname: GATEWAY_HOST,
+        path:     GATEWAY_PATH,
+        method:   'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(payload),
+          'Content-Type':    'application/json',
+          'Content-Length':  Buffer.byteLength(payload),
           'x-portkey-api-key': PORTKEY_API_KEY,
-          'x-portkey-provider': 'anthropic',
-          'Authorization': `Bearer ${ANTHROPIC_API_KEY}`,
         },
       },
       (res) => {
@@ -87,14 +92,15 @@ async function callPortkey() {
         res.on('data', (chunk) => (body += chunk));
         res.on('end', () => {
           if (res.statusCode !== 200) {
-            reject(new Error(`Portkey ${res.statusCode}: ${body}`));
+            reject(new Error(`Gateway ${res.statusCode}: ${body}`));
             return;
           }
           try {
+            // OpenAI chat/completions response shape
             const parsed = JSON.parse(body);
-            resolve(parsed.content?.[0]?.text ?? '_(no response)_');
+            resolve(parsed.choices?.[0]?.message?.content ?? '_(no response)_');
           } catch {
-            reject(new Error(`Failed to parse Portkey response: ${body}`));
+            reject(new Error(`Failed to parse gateway response: ${body}`));
           }
         });
       }
@@ -105,7 +111,7 @@ async function callPortkey() {
   });
 }
 
-// ─── Post GitHub PR comment ───────────────────────────────────────────────────
+// ─── Post GitHub comment ──────────────────────────────────────────────────────
 
 async function postComment(body) {
   const [owner, repo] = REPO.split('/');
@@ -115,14 +121,14 @@ async function postComment(body) {
     const req = https.request(
       {
         hostname: 'api.github.com',
-        path: `/repos/${owner}/${repo}/issues/${PR_NUMBER}/comments`,
-        method: 'POST',
+        path:     `/repos/${owner}/${repo}/issues/${PR_NUMBER}/comments`,
+        method:   'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type':   'application/json',
           'Content-Length': Buffer.byteLength(payload),
-          Authorization: `Bearer ${GH_TOKEN}`,
-          'User-Agent': 'NoteFlow-Claude-Review-Bot',
-          Accept: 'application/vnd.github+json',
+          'Authorization':  `Bearer ${GH_TOKEN}`,
+          'User-Agent':     'NoteFlow-Claude-Review-Bot',
+          'Accept':         'application/vnd.github+json',
         },
       },
       (res) => {
@@ -144,10 +150,10 @@ async function postComment(body) {
 
 (async () => {
   try {
-    console.log('Requesting review from Claude via Portkey…');
-    const review = await callPortkey();
+    console.log(`Requesting review from ${MODEL} via ${GATEWAY_HOST}…`);
+    const review = await callGateway();
 
-    const comment = `## Claude Code Review 🤖\n\n${review}\n\n---\n_Powered by [Portkey](https://portkey.ai) → Claude_`;
+    const comment = `## Claude Code Review 🤖\n\n${review}\n\n---\n_Powered by Perficient Portkey Gateway → AWS Bedrock → Claude_`;
     await postComment(comment);
 
     console.log('Review posted successfully.');
