@@ -1,0 +1,23 @@
+# ── .NET / ASP.NET Core ──────────────────────────────────────────────────────
+bin/
+obj/
+*.user
+*.suo
+*.db
+*.db-shm
+*.db-wal
+.vs/
+*.DotSettings.user
+TestResults/
+
+# ── Node / React ──────────────────────────────────────────────────────────────
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+frontend/coverage/
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db

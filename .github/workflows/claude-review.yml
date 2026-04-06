@@ -1,0 +1,53 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  pull_request_review_comment:
+    types: [created]
+  issue_comment:
+    types: [created]
+
+jobs:
+  claude-review:
+    # Only run on PRs and on comments that tag @claude
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # full history so Claude can diff properly
+
+      - uses: anthropics/claude-code-action@beta
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+          # ── Review instructions ────────────────────────────────────────────
+          direct_prompt: |
+            You are a Senior Full Stack Developer reviewing a Pull Request for the
+            NoteFlow note-taking application (ASP.NET Core 8 backend + React 18 /
+            TypeScript / Tailwind CSS frontend).
+
+            For every PR review please:
+            1. **Summary** — one paragraph describing what the PR changes.
+            2. **Architecture & Design** — check Repository pattern usage, DTO boundaries,
+               React hook separation, and component responsibility.
+            3. **Correctness** — spot logic bugs, null-reference risks, missing error
+               handling at system boundaries (API responses, localStorage).
+            4. **Security** — flag any XSS risks in the export HTML, SQL/EF injection
+               vectors, unvalidated user input reaching the DB.
+            5. **Test Coverage** — note missing xUnit or Jest/RTL tests for new code.
+            6. **Performance** — highlight unnecessary re-renders, missing EF Include
+               statements, or N+1 query patterns.
+            7. **Actionable Suggestions** — for each issue provide a concrete code
+               snippet showing the fix.
+
+            Be concise. Use GitHub-flavoured Markdown with collapsible sections where helpful.
