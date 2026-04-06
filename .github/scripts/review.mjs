@@ -7,8 +7,8 @@
  *
  * Required env vars (set as GitHub Actions secrets):
  *   PORTKEY_API_KEY      — your Portkey account API key
- *   PORTKEY_VIRTUAL_KEY  — the Portkey virtual-key slug that wraps your
- *                          Anthropic API key (created in the Portkey dashboard)
+ *   ANTHROPIC_API_KEY    — your Anthropic API key (passed directly since
+ *                          virtual keys are not available)
  *   GH_TOKEN             — GITHUB_TOKEN (provided automatically by Actions)
  *   GITHUB_REPOSITORY    — owner/repo  (provided automatically by Actions)
  *   PR_NUMBER            — pull request number
@@ -23,17 +23,17 @@ const https = require('https');
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const PORTKEY_API_KEY     = process.env.PORTKEY_API_KEY;
-const PORTKEY_VIRTUAL_KEY = process.env.PORTKEY_VIRTUAL_KEY;
-const GH_TOKEN            = process.env.GH_TOKEN;
+const PORTKEY_API_KEY  = process.env.PORTKEY_API_KEY;
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const GH_TOKEN         = process.env.GH_TOKEN;
 const REPO                = process.env.GITHUB_REPOSITORY;           // owner/repo
 const PR_NUMBER           = process.env.PR_NUMBER;
 const DIFF                = (process.env.PR_DIFF || '').slice(0, 12000); // cap size
 const PR_TITLE            = process.env.PR_TITLE || '';
 const TRIGGER_COMMENT     = process.env.TRIGGER_COMMENT || '';
 
-if (!PORTKEY_API_KEY || !PORTKEY_VIRTUAL_KEY) {
-  console.error('Missing PORTKEY_API_KEY or PORTKEY_VIRTUAL_KEY');
+if (!PORTKEY_API_KEY || !ANTHROPIC_API_KEY) {
+  console.error('Missing PORTKEY_API_KEY or ANTHROPIC_API_KEY');
   process.exit(1);
 }
 
@@ -78,7 +78,8 @@ async function callPortkey() {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(payload),
           'x-portkey-api-key': PORTKEY_API_KEY,
-          'x-portkey-virtual-key': PORTKEY_VIRTUAL_KEY,
+          'x-portkey-provider': 'anthropic',
+          'Authorization': `Bearer ${ANTHROPIC_API_KEY}`,
         },
       },
       (res) => {

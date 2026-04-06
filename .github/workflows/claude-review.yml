@@ -63,7 +63,7 @@ jobs:
       - name: Claude review via Portkey
         env:
           PORTKEY_API_KEY:     ${{ secrets.PORTKEY_API_KEY }}
-          PORTKEY_VIRTUAL_KEY: ${{ secrets.PORTKEY_VIRTUAL_KEY }}
+          ANTHROPIC_API_KEY:   ${{ secrets.ANTHROPIC_API_KEY }}
           GH_TOKEN:            ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY:   ${{ github.repository }}
           PR_NUMBER:           ${{ steps.pr.outputs.number }}
