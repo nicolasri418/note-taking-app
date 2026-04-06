@@ -1,20 +1,24 @@
-name: Claude Code Review
+name: Claude Code Review (via Portkey)
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-  pull_request_review_comment:
-    types: [created]
   issue_comment:
+    types: [created]
+  pull_request_review_comment:
     types: [created]
 
 jobs:
   claude-review:
-    # Only run on PRs and on comments that tag @claude
+    # Auto-review every PR  OR  respond when someone comments @claude on a PR thread
     if: |
       github.event_name == 'pull_request' ||
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
+      (github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request != null &&
+        contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' &&
+        contains(github.event.comment.body, '@claude'))
+
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -22,32 +26,48 @@ jobs:
       issues: write
 
     steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0          # full history so Claude can diff properly
+          fetch-depth: 0
 
-      - uses: anthropics/claude-code-action@beta
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+      # ── 2. Resolve PR number across all trigger types ─────────────────────────
+      - name: Resolve PR number
+        id: pr
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+            echo "title=${{ github.event.pull_request.title }}"  >> $GITHUB_OUTPUT
+            echo "comment=" >> $GITHUB_OUTPUT
+          else
+            echo "number=${{ github.event.issue.number }}"       >> $GITHUB_OUTPUT
+            echo "title=${{ github.event.issue.title }}"         >> $GITHUB_OUTPUT
+            echo "comment=${{ github.event.comment.body }}"      >> $GITHUB_OUTPUT
+          fi
 
-          # ── Review instructions ────────────────────────────────────────────
-          direct_prompt: |
-            You are a Senior Full Stack Developer reviewing a Pull Request for the
-            NoteFlow note-taking application (ASP.NET Core 8 backend + React 18 /
-            TypeScript / Tailwind CSS frontend).
+      # ── 3. Fetch the PR diff (capped at ~400 lines for token budget) ──────────
+      - name: Get PR diff
+        id: diff
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DIFF=$(gh pr diff ${{ steps.pr.outputs.number }} \
+                   --repo ${{ github.repository }} 2>/dev/null | head -c 14000 || echo "")
+          {
+            echo "content<<DIFF_EOF"
+            echo "$DIFF"
+            echo "DIFF_EOF"
+          } >> $GITHUB_OUTPUT
 
-            For every PR review please:
-            1. **Summary** — one paragraph describing what the PR changes.
-            2. **Architecture & Design** — check Repository pattern usage, DTO boundaries,
-               React hook separation, and component responsibility.
-            3. **Correctness** — spot logic bugs, null-reference risks, missing error
-               handling at system boundaries (API responses, localStorage).
-            4. **Security** — flag any XSS risks in the export HTML, SQL/EF injection
-               vectors, unvalidated user input reaching the DB.
-            5. **Test Coverage** — note missing xUnit or Jest/RTL tests for new code.
-            6. **Performance** — highlight unnecessary re-renders, missing EF Include
-               statements, or N+1 query patterns.
-            7. **Actionable Suggestions** — for each issue provide a concrete code
-               snippet showing the fix.
-
-            Be concise. Use GitHub-flavoured Markdown with collapsible sections where helpful.
+      # ── 4. Run the review script (Node built-in — no npm install needed) ──────
+      - name: Claude review via Portkey
+        env:
+          PORTKEY_API_KEY:     ${{ secrets.PORTKEY_API_KEY }}
+          PORTKEY_VIRTUAL_KEY: ${{ secrets.PORTKEY_VIRTUAL_KEY }}
+          GH_TOKEN:            ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY:   ${{ github.repository }}
+          PR_NUMBER:           ${{ steps.pr.outputs.number }}
+          PR_TITLE:            ${{ steps.pr.outputs.title }}
+          PR_DIFF:             ${{ steps.diff.outputs.content }}
+          TRIGGER_COMMENT:     ${{ steps.pr.outputs.comment }}
+        run: node .github/scripts/review.mjs
