@@ -10,9 +10,12 @@ on:
 
 jobs:
   claude-review:
-    # Auto-review every PR  OR  respond when someone comments @claude on a PR thread
+    # Auto-review every PR  OR  respond when someone comments @claude on a PR thread.
+    # Skip fork PRs on the pull_request trigger — secrets are not available there
+    # (fork PRs can still trigger a review by commenting @claude).
     if: |
-      github.event_name == 'pull_request' ||
+      (github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository) ||
       (github.event_name == 'issue_comment' &&
         github.event.issue.pull_request != null &&
         contains(github.event.comment.body, '@claude')) ||

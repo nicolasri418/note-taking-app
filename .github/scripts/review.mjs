@@ -28,17 +28,34 @@ const PORTKEY_API_KEY = process.env.PORTKEY_API_KEY;
 const GH_TOKEN        = process.env.GH_TOKEN;
 const REPO            = process.env.GITHUB_REPOSITORY;
 const PR_NUMBER       = process.env.PR_NUMBER;
-const DIFF            = (process.env.PR_DIFF    || '').slice(0, 12000);
-const PR_TITLE        = process.env.PR_TITLE    || '';
-const TRIGGER_COMMENT = process.env.TRIGGER_COMMENT || '';
+
+// C1: Cap TRIGGER_COMMENT to prevent oversized prompts
+const DIFF_CAP     = 28000;
+const COMMENT_CAP  = 4000;
+const RAW_DIFF     = (process.env.PR_DIFF    || '').slice(0, DIFF_CAP);
+const DIFF_TRIMMED = (process.env.PR_DIFF    || '').length > DIFF_CAP;
+const PR_TITLE     = process.env.PR_TITLE    || '';
+const TRIGGER_COMMENT = (process.env.TRIGGER_COMMENT || '').slice(0, COMMENT_CAP);
 
 // Gateway coordinates — matches the curl example from the team
 const GATEWAY_HOST  = 'portkeygateway.perficient.com';
 const GATEWAY_PATH  = '/v1/chat/completions';
 const MODEL         = '@aws-bedrock-use2/us.anthropic.claude-sonnet-4-6';
 
+// ─── Startup validation (C3) ──────────────────────────────────────────────────
+
 if (!PORTKEY_API_KEY) {
   console.error('Missing PORTKEY_API_KEY secret');
+  process.exit(1);
+}
+
+if (!REPO || !REPO.includes('/')) {
+  console.error(`Invalid GITHUB_REPOSITORY value: "${REPO}"`);
+  process.exit(1);
+}
+
+if (!PR_NUMBER) {
+  console.error('Missing PR_NUMBER');
   process.exit(1);
 }
 
@@ -59,9 +76,28 @@ For every review provide:
 
 Use GitHub-flavoured Markdown. Be concise. Use collapsible <details> sections for long code.`;
 
+const truncationNote = DIFF_TRIMMED
+  ? `\n> ⚠️ Diff was truncated to ${DIFF_CAP} characters. Some changes may not be reflected in this review.\n`
+  : '';
+
 const userContent = TRIGGER_COMMENT
-  ? `${TRIGGER_COMMENT}\n\nPR title: ${PR_TITLE}\n\nDiff:\n\`\`\`diff\n${DIFF}\n\`\`\``
-  : `Please review this PR.\n\nPR title: ${PR_TITLE}\n\nDiff:\n\`\`\`diff\n${DIFF}\n\`\`\``;
+  ? `${TRIGGER_COMMENT}\n\nPR title: ${PR_TITLE}\n\nDiff:\n\`\`\`diff\n${RAW_DIFF}\n\`\`\``
+  : `Please review this PR.\n\nPR title: ${PR_TITLE}\n\nDiff:\n\`\`\`diff\n${RAW_DIFF}\n\`\`\``;
+
+// ─── Retry with exponential back-off (C2) ─────────────────────────────────────
+
+async function withRetry(fn, { retries = 3, baseDelayMs = 1000 } = {}) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (attempt === retries) throw err;
+      const delay = baseDelayMs * 2 ** attempt;
+      console.warn(`Attempt ${attempt + 1} failed: ${err.message}. Retrying in ${delay}ms…`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+}
 
 // ─── Call gateway ─────────────────────────────────────────────────────────────
 
@@ -82,8 +118,8 @@ async function callGateway() {
         path:     GATEWAY_PATH,
         method:   'POST',
         headers: {
-          'Content-Type':    'application/json',
-          'Content-Length':  Buffer.byteLength(payload),
+          'Content-Type':      'application/json',
+          'Content-Length':    Buffer.byteLength(payload),
           'x-portkey-api-key': PORTKEY_API_KEY,
         },
       },
@@ -91,16 +127,22 @@ async function callGateway() {
         let body = '';
         res.on('data', (chunk) => (body += chunk));
         res.on('end', () => {
+          // C4: Truncate error body; validate content-type before JSON.parse
           if (res.statusCode !== 200) {
-            reject(new Error(`Gateway ${res.statusCode}: ${body}`));
+            const preview = body.slice(0, 300);
+            reject(new Error(`Gateway ${res.statusCode}: ${preview}`));
+            return;
+          }
+          const ct = res.headers['content-type'] || '';
+          if (!ct.includes('application/json')) {
+            reject(new Error(`Unexpected content-type "${ct}": ${body.slice(0, 200)}`));
             return;
           }
           try {
-            // OpenAI chat/completions response shape
             const parsed = JSON.parse(body);
             resolve(parsed.choices?.[0]?.message?.content ?? '_(no response)_');
           } catch {
-            reject(new Error(`Failed to parse gateway response: ${body}`));
+            reject(new Error(`Failed to parse gateway response: ${body.slice(0, 200)}`));
           }
         });
       }
@@ -114,7 +156,7 @@ async function callGateway() {
 // ─── Post GitHub comment ──────────────────────────────────────────────────────
 
 async function postComment(body) {
-  const [owner, repo] = REPO.split('/');
+  const [owner, repo] = REPO.split('/');   // C3: already validated above
   const payload = JSON.stringify({ body });
 
   return new Promise((resolve, reject) => {
@@ -136,7 +178,7 @@ async function postComment(body) {
         res.on('data', (c) => (data += c));
         res.on('end', () => {
           if (res.statusCode >= 200 && res.statusCode < 300) resolve();
-          else reject(new Error(`GitHub API ${res.statusCode}: ${data}`));
+          else reject(new Error(`GitHub API ${res.statusCode}: ${data.slice(0, 300)}`));
         });
       }
     );
@@ -151,9 +193,9 @@ async function postComment(body) {
 (async () => {
   try {
     console.log(`Requesting review from ${MODEL} via ${GATEWAY_HOST}…`);
-    const review = await callGateway();
+    const review = await withRetry(callGateway);
 
-    const comment = `## Claude Code Review 🤖\n\n${review}\n\n---\n_Powered by Perficient Portkey Gateway → AWS Bedrock → Claude_`;
+    const comment = `## Claude Code Review 🤖\n\n${truncationNote}${review}\n\n---\n_Powered by Perficient Portkey Gateway → AWS Bedrock → Claude_`;
     await postComment(comment);
 
     console.log('Review posted successfully.');

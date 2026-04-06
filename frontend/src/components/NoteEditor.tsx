@@ -78,7 +78,7 @@ export const NoteEditor: React.FC<Props> = ({ note, onSave, onDelete, onCancel }
     setSaving(true);
     setError(null);
     try {
-      await onSave({ title: title.trim(), body, tags, todoItems: todos });
+      await onSave({ title: title.trim(), body, tags, todoItems: todos.filter((t) => t.text.trim() !== '') });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed.');
     } finally {

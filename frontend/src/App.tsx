@@ -57,8 +57,8 @@ export default function App() {
   };
 
   const handleCancel = () => {
-    setEditorMode(selectedNote ? 'edit' : 'idle');
-    if (!selectedNote) setEditorMode('idle');
+    setSelectedNote(null);
+    setEditorMode('idle');
   };
 
   return (

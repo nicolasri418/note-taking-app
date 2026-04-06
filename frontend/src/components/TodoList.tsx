@@ -116,6 +116,7 @@ export const TodoList: React.FC<Props> = ({ items, onChange }) => {
             {/* Add child (only one level deep for now) */}
             {depth === 0 && (
               <button
+                type="button"
                 onClick={() => addTask(item.id!)}
                 title="Add sub-task"
                 className="hidden text-gray-300 hover:text-indigo-500 group-hover:block"
@@ -130,6 +131,7 @@ export const TodoList: React.FC<Props> = ({ items, onChange }) => {
 
             {/* Delete */}
             <button
+              type="button"
               onClick={() => deleteTask(item.id!)}
               title="Remove task"
               className="hidden text-gray-300 hover:text-red-400 group-hover:block"
@@ -155,6 +157,7 @@ export const TodoList: React.FC<Props> = ({ items, onChange }) => {
       {roots.length > 0 && renderItems(roots)}
 
       <button
+        type="button"
         onClick={() => addTask(null)}
         className="mt-2 flex items-center gap-1 rounded-md px-2 py-1 text-xs
                    text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30"
