@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.\\(test|spec\\)\\\\.\\(ts|tsx|js\\)$\")"
+    ]
+  }
+}

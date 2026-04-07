@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using NoteTakingApp.API.Data;
 using NoteTakingApp.API.Models;
 using NoteTakingApp.API.Repositories;
+using Xunit;
 
 namespace NoteTakingApp.Tests;
 

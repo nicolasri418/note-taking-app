@@ -4,6 +4,7 @@ using NoteTakingApp.API.Controllers;
 using NoteTakingApp.API.DTOs;
 using NoteTakingApp.API.Models;
 using NoteTakingApp.API.Repositories;
+using Xunit;
 
 namespace NoteTakingApp.Tests;
 

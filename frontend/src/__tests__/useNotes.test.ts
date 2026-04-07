@@ -127,4 +127,42 @@ describe('useNotes', () => {
 
     await waitFor(() => expect(mockApi.getAll).toHaveBeenCalledWith(undefined, 'work'));
   });
+
+  it('returns empty notes when localStorage has corrupted JSON and API fails', async () => {
+    localStorage.setItem('note_app_cache', 'INVALID_JSON{{{');
+    mockApi.getAll.mockRejectedValue(new Error('offline'));
+    mockApi.getTags.mockRejectedValue(new Error('offline'));
+
+    const { result } = renderHook(() => useNotes());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.notes).toHaveLength(0);
+  });
+
+  it('sets error to "Unknown error" when a non-Error is thrown', async () => {
+    mockApi.getAll.mockRejectedValue('string error');
+    mockApi.getTags.mockRejectedValue('string error');
+
+    const { result } = renderHook(() => useNotes());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.error).toBe('Unknown error');
+  });
+
+  it('updateNote preserves unaffected notes in state', async () => {
+    const note2 = { ...sampleNote, id: 2, title: 'Second' };
+    mockApi.getAll.mockResolvedValue([sampleNote, note2]);
+    const updatedNote1 = { ...sampleNote, title: 'Updated' };
+    mockApi.update.mockResolvedValue(updatedNote1);
+
+    const { result } = renderHook(() => useNotes());
+    await waitFor(() => expect(result.current.notes).toHaveLength(2));
+
+    await act(async () => {
+      await result.current.updateNote(1, { title: 'Updated', body: '', tags: [], todoItems: [] });
+    });
+
+    expect(result.current.notes.find((n) => n.id === 2)?.title).toBe('Second');
+    expect(result.current.notes.find((n) => n.id === 1)?.title).toBe('Updated');
+  });
 });
