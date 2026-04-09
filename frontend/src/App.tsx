@@ -80,17 +80,36 @@ export default function App() {
           <SearchBar value={filters.search} onChange={setSearch} />
         </div>
 
-        <button
-          onClick={handleNewNote}
-          className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2
-                     text-sm font-medium text-white shadow-sm hover:bg-indigo-700"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none"
-               viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
-          </svg>
-          New Note
-        </button>
+        <div className="flex items-center gap-2">
+          <a
+            href={import.meta.env.VITE_DEEPSEEK_CHAT_URL ?? 'http://localhost:5174'}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 rounded-lg border border-violet-500 px-4 py-2
+                       text-sm font-medium text-violet-600 shadow-sm hover:bg-violet-50
+                       dark:border-violet-400 dark:text-violet-400 dark:hover:bg-violet-900/20"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none"
+                 viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14
+                       a2 2 0 012 2v8a2 2 0 01-2 2h-5l-3 3v-3z"/>
+            </svg>
+            Chat with AI
+          </a>
+
+          <button
+            onClick={handleNewNote}
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2
+                       text-sm font-medium text-white shadow-sm hover:bg-indigo-700"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none"
+                 viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
+            </svg>
+            New Note
+          </button>
+        </div>
       </header>
 
       {/* ── Error Banner ──────────────────────────────────────────────── */}

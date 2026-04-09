@@ -78,6 +78,7 @@ export function useNotes() {
     const updated = await notesApi.update(id, data);
     setNotes((prev) => prev.map((n) => (n.id === id ? updated : n)));
     saveToLocalStorage(notes.map((n) => (n.id === id ? updated : n)));
+    setTags(await notesApi.getTags());
     return updated;
   }, [notes]);
 
@@ -85,6 +86,7 @@ export function useNotes() {
     await notesApi.delete(id);
     setNotes((prev) => prev.filter((n) => n.id !== id));
     saveToLocalStorage(notes.filter((n) => n.id !== id));
+    setTags(await notesApi.getTags());
   }, [notes]);
 
   // ── Filter helpers ─────────────────────────────────────────────────────────

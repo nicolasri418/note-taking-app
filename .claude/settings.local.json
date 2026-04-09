@@ -7,7 +7,9 @@
       "Bash(dotnet ef:*)",
       "Bash(gh auth:*)",
       "Bash(dotnet test:*)",
-      "Bash(npx jest:*)"
+      "Bash(npx jest:*)",
+      "Bash(dotnet build:*)",
+      "Bash(dotnet restore:*)"
     ]
   }
 }
