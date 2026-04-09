@@ -63,6 +63,8 @@ Swagger UI available at `/swagger` in development.
 - `services/apiService.ts` — Generic `request()` fetch wrapper; all API methods live here
 - `services/exportService.ts` — Export notes to TXT/PDF
 - `App.tsx` — Orchestrates layout and passes callbacks between components; coordinates `NoteList`, `NoteEditor`, `TagFilter`, and `SearchBar`
+- `components/NoteEditor.tsx` — Create/edit form for a single note; handles title, body, tags, and todo items
+- `components/TodoList.tsx` — Renders and manages the nested todo item list within the editor
 - `types/index.ts` — Shared TypeScript interfaces (`Note`, `Tag`, `TodoItem`, `NoteWrite`, etc.)
 
 **Port wiring:** Vite dev proxy forwards `/api/*` to `https://localhost:50293`.
@@ -92,11 +94,12 @@ These constraints are enforced in code and checked by the CI review bot:
 **Backend** (`backend/NoteTakingApp.Tests/`)
 - `NoteRepositoryTests` — Integration-style: uses EF Core InMemory DB (unique name per test for isolation). Tests tag deduplication, cascade deletes, timestamp updates.
 - `NotesControllerTests` — Unit-style: mocks `INoteRepository` with Moq. Tests HTTP status codes and DTO shape only.
+- `coverage.runsettings` — XPlat Code Coverage config; excludes `Program.cs` and generated/attributed code. Pass with `dotnet test --settings backend/coverage.runsettings`.
 
 **Frontend** (`frontend/src/__tests__/`)
 - Hook tests (`useNotes.test.ts`) — Mock the entire `notesApi` module; clear `localStorage` in `beforeEach`. Use `renderHook` + `waitFor` for async state.
 - `services/__mocks__/apiService.ts` — Manual Jest mock auto-picked up via `__mocks__` convention; update it when adding new `notesApi` methods.
-- Component tests — RTL role queries (`getByRole`) and `@testing-library/jest-dom` matchers.
+- `NoteCard.test.tsx` — Component test using RTL role queries (`getByRole`) and `@testing-library/jest-dom` matchers.
 - `exportService.test.ts` — Verifies HTML escaping (XSS prevention); keep this coverage when editing export logic.
 
 ## Adding Features
@@ -118,9 +121,19 @@ These constraints are enforced in code and checked by the CI review bot:
 
 # NoteFlow Project Commands
 
-- `/lead-agent`: Activates the NoteFlow Lead Agent persona. When triggered, read instructions from `.claude/agent-memory/noteflow-dev-agent.md` and strictly enforce the 4 Mandatory Rules (Database First, useNotes state, Tag Normalization, and Server-Side Search).
+Custom slash commands (`.claude/commands/`):
+
+- `/test-coverage`: Runs backend (xUnit with XPlat coverage) and frontend (Jest) test suites, then reports a coverage table and flags any files below the **90% threshold** for lines, branches, functions, and statements.
+- `/lead-agent`: Activates the NoteFlow Lead Agent persona. When triggered, read instructions from `.claude/agents/noteflow-dev-agent.md` and strictly enforce the 4 Mandatory Rules (Database First, useNotes state, Tag Normalization, and Server-Side Search).
 - `/lead-test`: Directs the agent to generate and run tests for the current file using xUnit (Backend) or Jest (Frontend).
 - `/lead-status`: Performs a quick health check of the project's architecture and pending TODOs.
+- `/check-user-stories`: Prompts for user stories, then checks whether each is implemented in code and covered by tests. Reports a per-story status table with code and test references.
+
+# Agents
+
+Custom subagents (`.claude/agents/`):
+
+- **`noteflow-dev-agent`** (`.claude/agents/noteflow-dev-agent.md`) — Full-stack NoteFlow dev agent. Use for any feature work, refactoring, testing, or GitHub issue management. Enforces the 4 Mandatory Rules and operates across Backend (C#/ASP.NET Core) and Frontend (React + TypeScript). Has access to GitHub, Filesystem, and SQLite MCPs. Maintains persistent memory in `.claude/agent-memory/noteflow-dev-agent/`.
 
 # Project Guidelines
 - Always follow the patterns defined in `.claude/agent-memory/`.

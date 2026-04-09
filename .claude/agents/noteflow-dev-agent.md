@@ -44,6 +44,9 @@ You operate as a disciplined, autonomous agent that enforces strict architectura
   ```
 - Never alter the database schema without a corresponding EF migration.
 - Use `EnsureCreated()` only for initial setup; use proper migrations for all subsequent changes.
+- All read-only repository methods MUST chain `.AsNoTracking()` for performance.
+- Any method returning a `Note` or collection MUST `.Include()` all navigation properties needed by the DTO (e.g., `NoteTags.ThenInclude(Tag)`, `TodoItems`). Failing to include is a blocking issue.
+- Never rely on lazy loading; it is disabled in `NoteDbContext`.
 
 ### Rule 2: Frontend State Management
 - NEVER introduce Redux, Zustand, Jotai, MobX, or any external state library.
@@ -61,6 +64,12 @@ You operate as a disciplined, autonomous agent that enforces strict architectura
 - Never filter the full notes array on the frontend for search purposes.
 - Expose search via query parameters on the API (e.g., `GET /api/notes?search=keyword`).
 - Frontend `SearchBar` sends the query string to the API; `useNotes` handles the response.
+- Use only LINQ `.Where()` predicates for dynamic filters. NEVER use `FromSqlRaw` or `FromSqlInterpolated` with user-supplied strings — all query parameters must arrive as C# variables bound by EF Core's parameterisation.
+
+### Rule 5: HTML Output Sanitisation
+- Any method in `exportService.ts` that builds HTML MUST sanitise all user-controlled fields (title, body, tags) before injection. Use the existing escaping utility in `exportService.ts`; do not bypass it.
+- Never use raw template literal interpolation to insert note content into HTML strings.
+- When adding new export formats, always apply the same escaping pattern used for the existing TXT/PDF export.
 
 ---
 
@@ -90,6 +99,7 @@ You operate as a disciplined, autonomous agent that enforces strict architectura
 - Help write boilerplate: controllers, repositories, DTOs, React components.
 - Follow existing naming conventions and patterns in the codebase.
 - Generate TypeScript interfaces in `types/index.ts` for any new data shapes.
+- Whenever a backend DTO changes, update the corresponding TypeScript interface in `types/index.ts` in the same step — never let them drift.
 - Ensure new backend endpoints have corresponding `apiService.ts` methods.
 
 ### Phase 2 — Testing & Refactoring
@@ -122,7 +132,7 @@ When receiving a task:
 3. **Validate against rules**: Confirm the approach doesn't violate the 4 mandatory rules.
 4. **Plan before coding**: For multi-file changes, outline the plan first.
 5. **Implement incrementally**: Backend changes first (with migrations), then API, then frontend.
-6. **Test**: Write or run tests after implementation.
+6. **Test**: Write or update xUnit / Jest tests for all modified code paths. Run the full suite (`dotnet test` / `npm test`) before considering the task complete. Do not suppress or skip failing tests to make CI green.
 7. **Document**: Update comments, Swagger annotations, or GitHub issues as appropriate.
 
 ## ⚠️ Quality Controls

@@ -148,6 +148,25 @@ public class NoteRepositoryTests
         Assert.Single(db.Tags);
     }
 
+    // ── GetAllTagsAsync ───────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetAllTagsAsync_ReturnsTagsOrderedByName()
+    {
+        using var db = CreateDb(nameof(GetAllTagsAsync_ReturnsTagsOrderedByName));
+        var repo = new NoteRepository(db);
+
+        db.Tags.Add(new Tag { Name = "work" });
+        db.Tags.Add(new Tag { Name = "personal" });
+        await db.SaveChangesAsync();
+
+        var tags = (await repo.GetAllTagsAsync()).ToList();
+
+        Assert.Equal(2, tags.Count);
+        Assert.Equal("personal", tags[0].Name); // alphabetical
+        Assert.Equal("work",     tags[1].Name);
+    }
+
     // ── TodoItem persistence ──────────────────────────────────────────────────
 
     [Fact]
@@ -166,5 +185,70 @@ public class NoteRepositoryTests
         var created = await repo.CreateAsync(note);
 
         Assert.Equal(2, created.TodoItems.Count);
+    }
+
+    // ── US-6: Persistence round-trip ──────────────────────────────────────────
+
+    [Fact]
+    public async Task GetByIdAsync_AfterCreate_ReturnsPersistednote()
+    {
+        using var db = CreateDb(nameof(GetByIdAsync_AfterCreate_ReturnsPersistednote));
+        var repo = new NoteRepository(db);
+
+        var note = await repo.CreateAsync(new Note { Title = "Round Trip", Body = "Persisted body" });
+        var fetched = await repo.GetByIdAsync(note.Id);
+
+        Assert.NotNull(fetched);
+        Assert.Equal("Round Trip", fetched!.Title);
+        Assert.Equal("Persisted body", fetched.Body);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_AfterUpdate_ReturnsUpdatedNote()
+    {
+        using var db = CreateDb(nameof(GetByIdAsync_AfterUpdate_ReturnsUpdatedNote));
+        var repo = new NoteRepository(db);
+
+        var note = await repo.CreateAsync(new Note { Title = "Original", Body = "Old body" });
+        note.Title = "Updated Title";
+        note.Body  = "New body";
+        await repo.UpdateAsync(note);
+
+        var fetched = await repo.GetByIdAsync(note.Id);
+
+        Assert.NotNull(fetched);
+        Assert.Equal("Updated Title", fetched!.Title);
+        Assert.Equal("New body",      fetched.Body);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WithTags_PersistsTagAssociation()
+    {
+        using var db = CreateDb(nameof(CreateAsync_WithTags_PersistsTagAssociation));
+        var repo = new NoteRepository(db);
+
+        var tag = await repo.GetOrCreateTagAsync("persistence");
+        var note = new Note { Title = "Tagged Note", Body = "" };
+        note.NoteTags.Add(new NoteTag { Tag = tag });
+        var created = await repo.CreateAsync(note);
+
+        var fetched = await repo.GetByIdAsync(created.Id);
+
+        Assert.NotNull(fetched);
+        Assert.Single(fetched!.NoteTags);
+        Assert.Equal("persistence", fetched.NoteTags.First().Tag.Name);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_RemovesNoteFromGetAllResults()
+    {
+        using var db = CreateDb(nameof(DeleteAsync_RemovesNoteFromGetAllResults));
+        var repo = new NoteRepository(db);
+
+        var note = await repo.CreateAsync(new Note { Title = "To Delete", Body = "" });
+        await repo.DeleteAsync(note.Id);
+
+        var allNotes = await repo.GetAllAsync();
+        Assert.Empty(allNotes);
     }
 }

@@ -165,4 +165,50 @@ describe('useNotes', () => {
     expect(result.current.notes.find((n) => n.id === 2)?.title).toBe('Second');
     expect(result.current.notes.find((n) => n.id === 1)?.title).toBe('Updated');
   });
+
+  // ── US-6: localStorage write-back (persistence) ───────────────────────────
+
+  it('createNote writes the new note to localStorage', async () => {
+    const newNote = { ...sampleNote, id: 2, title: 'Persisted' };
+    mockApi.create.mockResolvedValue(newNote);
+
+    const { result } = renderHook(() => useNotes());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await act(async () => {
+      await result.current.createNote({ title: 'Persisted', body: '', tags: [], todoItems: [] });
+    });
+
+    const cached = JSON.parse(localStorage.getItem('note_app_cache') ?? '[]') as Note[];
+    expect(cached.some((n) => n.id === 2)).toBe(true);
+  });
+
+  it('updateNote writes the updated note to localStorage', async () => {
+    const updatedNote = { ...sampleNote, title: 'Cached Updated' };
+    mockApi.update.mockResolvedValue(updatedNote);
+
+    const { result } = renderHook(() => useNotes());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await act(async () => {
+      await result.current.updateNote(1, { title: 'Cached Updated', body: '', tags: [], todoItems: [] });
+    });
+
+    const cached = JSON.parse(localStorage.getItem('note_app_cache') ?? '[]') as Note[];
+    expect(cached.find((n) => n.id === 1)?.title).toBe('Cached Updated');
+  });
+
+  it('deleteNote removes the note from localStorage', async () => {
+    mockApi.delete.mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useNotes());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await act(async () => {
+      await result.current.deleteNote(1);
+    });
+
+    const cached = JSON.parse(localStorage.getItem('note_app_cache') ?? '[]') as Note[];
+    expect(cached.find((n) => n.id === 1)).toBeUndefined();
+  });
 });

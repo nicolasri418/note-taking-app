@@ -12,9 +12,9 @@ type: project
 - **Fact:** `useNotes` hook is the single source of truth.
 - **How to apply:** Reject any suggestion to add Redux, Zustand, or other state libraries.
 
-**Rule 3: Tag Normalization**
-- **Fact:** Tags must be lowercase and trimmed.
-- **How to apply:** Validate normalization in both Frontend service and Backend repository.
+**Rule 3: Tag Normalization (backend-only)**
+- **Fact:** Tags must be lowercase and trimmed. Normalization happens exclusively in `NoteRepository.GetOrCreateTagAsync()`.
+- **How to apply:** Never add normalization to frontend code. The frontend sends raw tag strings; the backend normalizes before persistence.
 
 **Rule 4: Server-Side Search**
 - **Fact:** Filtering happens in SQLite via LINQ, not in the React array.

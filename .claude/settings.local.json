@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Bash(grep -E \"\\\\.\\(test|spec\\)\\\\.\\(ts|tsx|js\\)$\")"
+      "Bash(grep -E \"\\\\.\\(test|spec\\)\\\\.\\(ts|tsx|js\\)$\")",
+      "Bash(gh pr:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(dotnet ef:*)",
+      "Bash(gh auth:*)",
+      "Bash(dotnet test:*)",
+      "Bash(npx jest:*)"
     ]
   }
 }

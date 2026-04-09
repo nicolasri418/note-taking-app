@@ -1,10 +1,10 @@
 ---
-name: User Profile - Nicolas
+name: User Profile
 description: Senior Full-Stack Developer context and expertise.
 type: user
 ---
 
-Nicolas is a Senior Full-Stack Developer and Technical Consultant.
+The developer is a Senior Full-Stack Developer and Technical Consultant.
 
 **Technical Profile:**
 - **Expertise:** Deep knowledge in .NET (8+), C#, and Azure Services.
