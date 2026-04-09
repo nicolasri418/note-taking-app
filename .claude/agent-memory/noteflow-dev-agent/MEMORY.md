@@ -1,0 +1,4 @@
+- [User Profile](user_profile.md) — Nicolas's senior background and collaboration preferences.
+- [Project Standards](project_standards.md) — Mandatory architectural rules and the "No Docker" constraint.
+- [Tech Stack Context](tech_stack_context.md) — Specific versions and local execution environment.
+- [Feedback Log](feedback_patterns.md) — Preferred response style and validated technical decisions.

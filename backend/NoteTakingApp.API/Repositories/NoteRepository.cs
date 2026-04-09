@@ -1,10 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using NoteTakingApp.API.Data;
 using NoteTakingApp.API.Models;
+using NoteTakingApp.API.Services;
 
 namespace NoteTakingApp.API.Repositories;
 
-public class NoteRepository(NoteDbContext db) : INoteRepository
+public class NoteRepository(NoteDbContext db, INoteExportService exportService) : INoteRepository
 {
     // ── Base query with all necessary includes ────────────────────────────────
     private IQueryable<Note> NotesWithIncludes() =>
@@ -44,7 +45,10 @@ public class NoteRepository(NoteDbContext db) : INoteRepository
         await NotesWithIncludes().FirstOrDefaultAsync(n => n.Id == id);
 
     public async Task<IEnumerable<Tag>> GetAllTagsAsync() =>
-        await db.Tags.OrderBy(t => t.Name).ToListAsync();
+        await db.Tags
+            .Where(t => t.NoteTags.Any())
+            .OrderBy(t => t.Name)
+            .ToListAsync();
 
     // ── Commands ──────────────────────────────────────────────────────────────
 
@@ -54,7 +58,10 @@ public class NoteRepository(NoteDbContext db) : INoteRepository
         note.UpdatedAt = DateTime.UtcNow;
         db.Notes.Add(note);
         await db.SaveChangesAsync();
-        return (await GetByIdAsync(note.Id))!;
+        var saved = (await GetByIdAsync(note.Id))!;
+        // Fire-and-forget: sync note to DeepSeekChat RAG pipeline without blocking the response
+        _ = exportService.ExportNoteAsync(saved);
+        return saved;
     }
 
     public async Task<Note> UpdateAsync(Note note)
@@ -62,7 +69,10 @@ public class NoteRepository(NoteDbContext db) : INoteRepository
         note.UpdatedAt = DateTime.UtcNow;
         db.Notes.Update(note);
         await db.SaveChangesAsync();
-        return (await GetByIdAsync(note.Id))!;
+        var saved = (await GetByIdAsync(note.Id))!;
+        // Fire-and-forget: re-sync updated note to DeepSeekChat RAG pipeline
+        _ = exportService.ExportNoteAsync(saved);
+        return saved;
     }
 
     public async Task<bool> DeleteAsync(int id)
@@ -72,6 +82,8 @@ public class NoteRepository(NoteDbContext db) : INoteRepository
 
         db.Notes.Remove(note);
         await db.SaveChangesAsync();
+        // Fire-and-forget: remove the note's PDF from the RAG pipeline blob container
+        _ = exportService.DeleteNoteExportAsync(id);
         return true;
     }
 

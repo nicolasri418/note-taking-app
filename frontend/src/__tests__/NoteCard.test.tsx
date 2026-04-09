@@ -58,4 +58,32 @@ describe('NoteCard', () => {
     render(<NoteCard note={note} isSelected={false} onSelect={jest.fn()} />);
     expect(screen.queryByText(/done/)).not.toBeInTheDocument();
   });
+
+  it('shows "just now" for notes updated less than a minute ago', () => {
+    const thirtySecsAgo = new Date(Date.now() - 30_000).toISOString();
+    const note = { ...mockNote, updatedAt: thirtySecsAgo };
+    render(<NoteCard note={note} isSelected={false} onSelect={jest.fn()} />);
+    expect(screen.getByText('just now')).toBeInTheDocument();
+  });
+
+  it('shows hours ago for notes updated over an hour ago', () => {
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const note = { ...mockNote, updatedAt: twoHoursAgo };
+    render(<NoteCard note={note} isSelected={false} onSelect={jest.fn()} />);
+    expect(screen.getByText('2h ago')).toBeInTheDocument();
+  });
+
+  it('shows days ago for notes updated over a day ago', () => {
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+    const note = { ...mockNote, updatedAt: twoDaysAgo };
+    render(<NoteCard note={note} isSelected={false} onSelect={jest.fn()} />);
+    expect(screen.getByText('2d ago')).toBeInTheDocument();
+  });
+
+  it('truncates body preview longer than 120 characters', () => {
+    const longBody = 'A'.repeat(130);
+    const note = { ...mockNote, body: longBody };
+    render(<NoteCard note={note} isSelected={false} onSelect={jest.fn()} />);
+    expect(screen.getByText(/A{120}…/)).toBeInTheDocument();
+  });
 });

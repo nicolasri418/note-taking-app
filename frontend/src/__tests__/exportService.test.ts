@@ -91,6 +91,18 @@ describe('noteToHtml', () => {
     const html = noteToHtml(mockNote);
     expect(html).toContain('<span>personal</span>');
   });
+
+  it('omits tags paragraph when note has no tags', () => {
+    const note: Note = { ...mockNote, tags: [] };
+    const html = noteToHtml(note);
+    expect(html).not.toContain('class="tags"');
+  });
+
+  it('omits checklist section when note has no todos', () => {
+    const note: Note = { ...mockNote, todoItems: [] };
+    const html = noteToHtml(note);
+    expect(html).not.toContain('<section>');
+  });
 });
 
 // ─── exportAsTxt (DOM side-effects) ──────────────────────────────────────────
@@ -112,5 +124,107 @@ describe('exportAsTxt', () => {
     expect(anchor.download).toBe('Shopping List.txt');
     expect(anchor.click).toHaveBeenCalled();
     expect(revokeUrl).toHaveBeenCalledWith('blob:mock');
+  });
+
+  it('uses document.createElement by default when no createAnchor is provided', () => {
+    const createUrl = jest.fn().mockReturnValue('blob:default');
+    const revokeUrl = jest.fn();
+
+    document.body.appendChild = jest.fn();
+    document.body.removeChild = jest.fn();
+
+    // Only 3 args — default _createAnchor executes document.createElement('a')
+    exportAsTxt(mockNote, createUrl, revokeUrl);
+
+    expect(createUrl).toHaveBeenCalledWith(expect.any(Blob));
+    expect(revokeUrl).toHaveBeenCalledWith('blob:default');
+  });
+
+  it('uses URL.createObjectURL and URL.revokeObjectURL by default when called with only note', () => {
+    URL.createObjectURL = jest.fn().mockReturnValue('blob:url-default');
+    URL.revokeObjectURL = jest.fn();
+    document.body.appendChild = jest.fn();
+    document.body.removeChild = jest.fn();
+
+    // No injected args — all three defaults execute
+    exportAsTxt(mockNote);
+
+    expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:url-default');
+  });
+
+  it('uses "note" as filename when note title sanitizes to empty string', () => {
+    const createUrl = jest.fn().mockReturnValue('blob:empty-title');
+    const revokeUrl = jest.fn();
+    const anchor = { href: '', download: '', click: jest.fn() } as unknown as HTMLAnchorElement;
+    const createAnchor = jest.fn().mockReturnValue(anchor);
+    document.body.appendChild = jest.fn();
+    document.body.removeChild = jest.fn();
+
+    const emptyTitleNote: Note = { ...mockNote, title: '' };
+    exportAsTxt(emptyTitleNote, createUrl, revokeUrl, createAnchor);
+
+    expect(anchor.download).toBe('note.txt');
+  });
+});
+
+// ─── exportAsPdf ─────────────────────────────────────────────────────────────
+
+import { exportAsPdf } from '../services/exportService';
+
+describe('exportAsPdf', () => {
+  it('removes the iframe immediately when contentDocument is unavailable', () => {
+    const mockIframe = {
+      style: { cssText: '' },
+      contentDocument: null,
+      contentWindow: null,
+      onload: null,
+    };
+    jest.spyOn(document, 'createElement').mockReturnValueOnce(mockIframe as unknown as HTMLIFrameElement);
+    const appendChild = jest.spyOn(document.body, 'appendChild').mockReturnValueOnce(mockIframe as any);
+    const removeChild = jest.spyOn(document.body, 'removeChild').mockReturnValueOnce(mockIframe as any);
+
+    exportAsPdf(mockNote);
+
+    expect(appendChild).toHaveBeenCalled();
+    expect(removeChild).toHaveBeenCalled();
+
+    appendChild.mockRestore();
+    removeChild.mockRestore();
+    (document.createElement as jest.Mock).mockRestore?.();
+  });
+
+  it('writes HTML to contentDocument and sets up onload', () => {
+    const mockDoc = { open: jest.fn(), write: jest.fn(), close: jest.fn() };
+    const mockWindow = { print: jest.fn() };
+    const mockIframe = {
+      style: { cssText: '' },
+      contentDocument: mockDoc,
+      contentWindow: mockWindow,
+      onload: null as unknown as () => void,
+    };
+    jest.spyOn(document, 'createElement').mockReturnValueOnce(mockIframe as unknown as HTMLIFrameElement);
+    const appendChild = jest.spyOn(document.body, 'appendChild').mockReturnValueOnce(mockIframe as any);
+    const removeChild = jest.spyOn(document.body, 'removeChild').mockReturnValueOnce(mockIframe as any);
+    const contains = jest.spyOn(document.body, 'contains').mockReturnValueOnce(true);
+
+    exportAsPdf(mockNote);
+
+    expect(mockDoc.open).toHaveBeenCalled();
+    expect(mockDoc.write).toHaveBeenCalledWith(expect.stringContaining('<!DOCTYPE html>'));
+    expect(mockDoc.close).toHaveBeenCalled();
+
+    // Fire onload to cover iframe.onload callback
+    jest.useFakeTimers();
+    mockIframe.onload();
+    expect(mockWindow.print).toHaveBeenCalled();
+    jest.runAllTimers();
+    expect(removeChild).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
+
+    appendChild.mockRestore();
+    removeChild.mockRestore();
+    contains.mockRestore();
+    (document.createElement as jest.Mock).mockRestore?.();
   });
 });
